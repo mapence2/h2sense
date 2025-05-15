@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Hydrogen Concentration Predictor</title>
+  <style>
+    body {
+      font-family: sans-serif;
+      padding: 30px;
+      max-width: 900px;
+      margin: auto;
+    }
+
+    table {
+      border-collapse: collapse;
+      width: 100%;
+      margin-bottom: 20px;
+    }
+
+    th, td {
+      border: 1px solid #ccc;
+      text-align: center;
+      padding: 8px;
+    }
+
+    input {
+      width: 100%;
+      border: none;
+      text-align: center;
+      font-size: 1em;
+    }
+
+    button {
+      padding: 10px 20px;
+      margin-right: 10px;
+    }
+  </style>
+</head>
+<body>
+  <h2>Hydrogen Concentration Predictor</h2>
+
+  <table id="inputTable">
+    <thead>
+      <tr>
+        <th>Temperature (°C)</th>
+        <th>Relative Humidity (%)</th>
+        <th>Sensor Response (°C)</th>
+        <th>Predicted H₂ Concentration (%)</th>
+      </tr>
+    </thead>
+    <tbody id="tableBody">
+      <tr>
+        <td><input type="number" step="0.1" value="25"></td>
+        <td><input type="number" step="0.1" value="1.0"></td>
+        <td><input type="number" step="0.1" value="50"></td>
+        <td class="predictionCell">—</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <button onclick="addRow()">+ Add Row</button>
+  <button onclick="predictAll()">Predict All</button>
+
+  <script>
+    function addRow() {
+      const row = document.createElement('tr');
+
+      for (let i = 0; i < 3; i++) {
+        const cell = document.createElement('td');
+        const input = document.createElement('input');
+        input.type = 'number';
+        input.step = '0.1';
+        input.value = (i === 0) ? 25 : (i === 1 ? 1.0 : 50);
+        cell.appendChild(input);
+        row.appendChild(cell);
+      }
+
+      const predCell = document.createElement('td');
+      predCell.className = 'predictionCell';
+      predCell.textContent = '—';
+      row.appendChild(predCell);
+
+      document.getElementById('tableBody').appendChild(row);
+    }
+
+    function predictAll() {
+      const table = document.getElementById('inputTable');
+      const rows = table.getElementsByTagName('tbody')[0].getElementsByTagName('tr');
+      const inputs = [];
+
+      for (const row of rows) {
+        const cells = row.getElementsByTagName('input');
+        const temp = parseFloat(cells[0].value);
+        const humidity = parseFloat(cells[1].value);
+        const response = parseFloat(cells[2].value);
+        inputs.push({ temp, response, humidity });
+      }
+
+      fetch('/predict', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({ inputs })
+      })
+      .then(res => res.json())
+      .then(data => {
+        const predictions = data.predictions;
+        function roundToSigFigs(num, sigFigs) {
+            if (num === 0) return 0;
+            const mult = Math.pow(10, sigFigs - Math.floor(Math.log10(Math.abs(num))) - 1);
+            return Math.round(num * mult) / mult;
+          }
+
+          for (let i = 0; i < rows.length; i++) {
+            const { mean, std } = predictions[i];
+
+            // Round std to 1 significant figure
+            const roundedStd = roundToSigFigs(std, 1);
+
+            // Determine how many decimal places the rounded std has
+            const decimalPlaces = (roundedStd < 1) ? -Math.floor(Math.log10(roundedStd)) : 0;
+
+            // Round mean to match that decimal precision
+            const roundedMean = mean.toFixed(decimalPlaces);
+            const roundedStdStr = roundedStd.toFixed(decimalPlaces);
+
+            rows[i].getElementsByClassName('predictionCell')[0].textContent =
+              `${roundedMean} ± ${roundedStdStr} %`;
+          }
+      });
+    }
+  </script>
+</body>
+</html>
